@@ -1,37 +1,20 @@
 #!yarn ts-node
 
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import execa from 'execa';
-import which from 'which';
+
+type Workspace = {
+  name: string;
+  workspaceDependencies: string[];
+};
 
 /**
- * Retrieves the path to `dot`, which is one of the tools within the Graphviz
- * toolkit to render a graph.
+ * Uses the `yarn` executable to gather the Yarn workspaces inside of this
+ * project (the packages that are matched by the `workspaces` field inside of
+ * `package.json`).
  *
- * @returns The path if `dot` exists or else null.
+ * @returns The list of workspaces.
  */
-async function getDotExecutablePath() {
-  try {
-    return await which('dot');
-  } catch (error) {
-    if (error.message === 'dot not found') {
-      return null;
-    }
-    throw error;
-  }
-}
-
-/**
- * Uses `yarn workspaces list` to retrieve all of the workspace packages in this
- * repo and their relationship to each other, produces code that can be
- * passed to the `dot` tool, and writes that to a file.
- *
- * @param dotFilePath - The path to the file that will be written and ultimately
- * passed to `dot`.
- */
-async function generateGraphDotFile(dotFilePath) {
+async function retrieveWorkspaces(): Promise<Workspace[]> {
   const { stdout } = await execa('yarn', [
     'workspaces',
     'list',
@@ -39,85 +22,92 @@ async function generateGraphDotFile(dotFilePath) {
     '--verbose',
   ]);
 
-  const modules = stdout
+  return stdout
     .split('\n')
     .map((line) => JSON.parse(line))
     .slice(1);
-
-  const nodes = modules.map((mod) => {
-    const fullPackageName = mod.name;
-    const shortPackageName = fullPackageName
-      .replace(/^@metamask\//u, '')
-      .replace(/-/gu, '_');
-    return `  ${shortPackageName} [label="${fullPackageName}"];`;
-  });
-
-  const connections = [];
-  modules.forEach((mod) => {
-    const fullPackageName = mod.name;
-    const shortPackageName = fullPackageName
-      .replace(/^@metamask\//u, '')
-      .replace(/-/gu, '_');
-    mod.workspaceDependencies.forEach((dependency) => {
-      const shortDependencyName = dependency
-        .replace(/^packages\//u, '')
-        .replace(/-/gu, '_');
-      connections.push(`  ${shortPackageName} -> ${shortDependencyName};`);
-    });
-  });
-
-  const graphSource = [
-    'digraph G {',
-    '  rankdir="LR";',
-    ...nodes,
-    ...connections,
-    '}',
-  ].join('\n');
-
-  await fs.promises.writeFile(dotFilePath, graphSource);
 }
 
 /**
- * Uses `dot` to render the dependency graph.
+ * Builds a piece of the Mermaid graph by defining a node for each workspace
+ * package within this project.
  *
- * @param dotExecutablePath - The path to `dot`.
- * @param dotFilePath - The path to file that instructs `dot` how to render the
- * graph.
- * @param graphFilePath - The path to the image file that will be written.
+ * @param workspaces - The Yarn workspaces inside of this project.
+ * @returns A set of lines that will go into the final Mermaid graph.
  */
-async function renderGraph(dotExecutablePath, dotFilePath, graphFilePath) {
-  await execa(dotExecutablePath, [
-    dotFilePath,
-    '-T',
-    'png',
-    '-o',
-    graphFilePath,
-  ]);
+function buildMermaidNodeLines(workspaces: Workspace[]): string[] {
+  return workspaces.map((workspace) => {
+    const fullPackageName = workspace.name;
+    const shortPackageName = fullPackageName
+      .replace(/^@metamask\//u, '')
+      .replace(/-/gu, '_');
+    return `${shortPackageName}(["${fullPackageName}"]);`;
+  });
+}
+
+/**
+ * Builds a piece of the Mermaid graph by defining connections between nodes
+ * that correspond to dependencies between workspace packages within this
+ * project.
+ *
+ * @param workspaces - The Yarn workspaces inside of this project.
+ * @returns A set of lines that will go into the final Mermaid graph.
+ */
+function buildMermaidConnectionLines(workspaces: Workspace[]): string[] {
+  const connections = [];
+  workspaces.forEach((workspace) => {
+    const fullPackageName = workspace.name;
+    const shortPackageName = fullPackageName
+      .replace(/^@metamask\//u, '')
+      .replace(/-/gu, '_');
+    workspace.workspaceDependencies.forEach((dependency) => {
+      const shortDependencyName = dependency
+        .replace(/^packages\//u, '')
+        .replace(/-/gu, '_');
+      connections.push(`${shortPackageName} --> ${shortDependencyName};`);
+    });
+  });
+  return connections;
+}
+
+/**
+ * Creates the Mermaid graph from the given node lines and connection lines,
+ * wrapping it in a triple-backtick directive so that it can be embedded within
+ * a Markdown document.
+ *
+ * @param nodeLines - The set of nodes in the graph as lines.
+ * @param connectionLines - The set of connections in the graph as lines.
+ * @returns The graph in string format.
+ */
+function assembleMermaidMarkdownFragment(
+  nodeLines: string[],
+  connectionLines: string[],
+): string {
+  return [
+    '``` mermaid',
+    'graph TD;',
+    ...nodeLines.map((line) => `  ${line}`),
+    ...connectionLines.map((line) => `  ${line}`),
+    '```',
+  ].join('\n');
 }
 
 /**
  * The entrypoint to this script.
+ *
+ * Uses `yarn workspaces list` to retrieve all of the workspace packages in this
+ * project and their relationships to each other, then produces a Markdown
+ * fragment that represents a Mermaid graph.
  */
 async function main() {
-  const tempDirectory = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), 'metamask-core-'),
+  const workspaces = await retrieveWorkspaces();
+  const nodeLines = buildMermaidNodeLines(workspaces);
+  const connectionLines = buildMermaidConnectionLines(workspaces);
+  const markdownFragment = assembleMermaidMarkdownFragment(
+    nodeLines,
+    connectionLines,
   );
-  const dotFilePath = path.join(tempDirectory, 'dependency-graph.dot');
-  const graphFilePath = path.resolve(
-    __dirname,
-    '../assets/dependency-graph.png',
-  );
-  const dotExecutablePath = await getDotExecutablePath();
-
-  if (dotExecutablePath) {
-    await generateGraphDotFile(dotFilePath);
-    await renderGraph(dotExecutablePath, dotFilePath, graphFilePath);
-    console.log(`Done! Graph written to ${graphFilePath}.`);
-  } else {
-    throw new Error(
-      "It looks like you don't have Graphviz installed. You'll need to install this to generate the dependency graph.",
-    );
-  }
+  console.log(markdownFragment);
 }
 
 main().catch((error) => {

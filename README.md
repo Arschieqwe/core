@@ -28,7 +28,70 @@ This repository houses the following packages:
 
 Or, in graph form [^fn1]:
 
-![Dependency graph](assets/dependency-graph.png)
+``` mermaid
+graph LR;
+  address_book_controller(["@metamask/address-book-controller"]);
+  announcement_controller(["@metamask/announcement-controller"]);
+  approval_controller(["@metamask/approval-controller"]);
+  assets_controllers(["@metamask/assets-controllers"]);
+  base_controller(["@metamask/base-controller"]);
+  composable_controller(["@metamask/composable-controller"]);
+  controller_utils(["@metamask/controller-utils"]);
+  ens_controller(["@metamask/ens-controller"]);
+  gas_fee_controller(["@metamask/gas-fee-controller"]);
+  keyring_controller(["@metamask/keyring-controller"]);
+  message_manager(["@metamask/message-manager"]);
+  network_controller(["@metamask/network-controller"]);
+  notification_controller(["@metamask/notification-controller"]);
+  permission_controller(["@metamask/permission-controller"]);
+  phishing_controller(["@metamask/phishing-controller"]);
+  preferences_controller(["@metamask/preferences-controller"]);
+  rate_limit_controller(["@metamask/rate-limit-controller"]);
+  signature_controller(["@metamask/signature-controller"]);
+  transaction_controller(["@metamask/transaction-controller"]);
+  address_book_controller --> base_controller;
+  address_book_controller --> controller_utils;
+  announcement_controller --> base_controller;
+  approval_controller --> base_controller;
+  approval_controller --> controller_utils;
+  assets_controllers --> approval_controller;
+  assets_controllers --> base_controller;
+  assets_controllers --> controller_utils;
+  assets_controllers --> network_controller;
+  assets_controllers --> preferences_controller;
+  base_controller --> controller_utils;
+  composable_controller --> base_controller;
+  ens_controller --> base_controller;
+  ens_controller --> controller_utils;
+  ens_controller --> network_controller;
+  gas_fee_controller --> base_controller;
+  gas_fee_controller --> controller_utils;
+  gas_fee_controller --> network_controller;
+  keyring_controller --> base_controller;
+  keyring_controller --> controller_utils;
+  keyring_controller --> message_manager;
+  keyring_controller --> preferences_controller;
+  message_manager --> base_controller;
+  message_manager --> controller_utils;
+  network_controller --> base_controller;
+  network_controller --> controller_utils;
+  notification_controller --> base_controller;
+  permission_controller --> approval_controller;
+  permission_controller --> base_controller;
+  permission_controller --> controller_utils;
+  phishing_controller --> base_controller;
+  phishing_controller --> controller_utils;
+  preferences_controller --> base_controller;
+  preferences_controller --> controller_utils;
+  rate_limit_controller --> base_controller;
+  signature_controller --> approval_controller;
+  signature_controller --> base_controller;
+  signature_controller --> controller_utils;
+  signature_controller --> message_manager;
+  transaction_controller --> base_controller;
+  transaction_controller --> controller_utils;
+  transaction_controller --> network_controller;
+```
 
 Refer to individual packages for usage instructions.
 
